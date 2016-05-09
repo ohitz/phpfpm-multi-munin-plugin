@@ -1,0 +1,266 @@
+#! /usr/bin/perl
+
+=head1 NAME
+
+phpfpm-multi - Munin multigraph plugin to monitor PHP FPM pools
+
+=head1 APPLICABLE SYSTEMS
+
+PHP FPM installations, tested with PHP 7.0 FPM.
+
+Requires the JSON perl module (C<apt-get install libjson-perl> on
+Debian systems) and the C<cgi-fcgi> tool (C<apt-get install
+libfcgi0ldbl> on Debian systems).
+
+=head1 CONFIGURATION
+
+The plugin needs to be able to read the different pool configuration
+files and needs access to the sockets. If root is the only user which
+has access to these resources, the following needs to be configured:
+
+    [phpfpm-multi]
+    user root
+
+The path to the socket as well as the status URL will be fetched read
+from the configuration file.
+
+In addition, the following variables can be defined:
+
+=over
+
+=item C<env.pooldir> (default: C</etc/php/7.0/fpm/pool.d>)
+
+Directory containing the pool configuration files.
+
+=item C<env.hide_pools> (default: empty)
+
+Comma-separated list of pools for which no statistics should be
+gathered.
+
+=back
+
+=head1 AUTHOR
+
+Oliver Hitz <oliver@net-track.ch>
+
+=head1 LICENSE
+
+GPL
+
+=cut
+
+use strict;
+use JSON;
+use File::Spec;
+use Munin::Plugin;
+
+my $cfg_pooldir = $ENV{pooldir} || "/etc/php/7.0/fpm/pool.d/";
+my @cfg_hide_pools;
+if ($ENV{hide_pools}) {
+  @cfg_hide_pools = split /,/, $ENV{hide_pools};
+}
+
+# autoconf
+if ($ARGV[0] eq "autoconf") {
+  if (`which cgi-fcgi`) {
+    print "yes\n";
+  } else {
+    print "no (cgi-fcgi not found)\n";
+  }
+  exit 0;
+}
+
+# Get the list of pools.
+my @pools;
+
+if (opendir my $dh, $cfg_pooldir) {
+  while (my $entry = readdir $dh) {
+    if ($entry !~ /\.conf$/) {
+      next;
+    }
+    
+    my $pool = {
+      file => File::Spec->catfile($cfg_pooldir, $entry)
+    };
+
+    my $poolconf;
+    if (!open($poolconf, $pool->{file})) {
+      warning("Unable to pool configuration open %s.",
+              $pool->{file});
+      next;
+    }
+
+    while (my $line = <$poolconf>) {
+      # Erase comments.
+      $line =~ s/;.*$//;
+
+      if ($line =~ /^\[([^\]]*)\]/) {
+        $pool->{pool} = $1;
+      } elsif ($line =~ /^listen\s*=\s*(\S+)$/) {
+        $pool->{socket} = $1;
+      } elsif ($line =~ /^pm.status_path\s*=\s*(\S+)$/) {
+        $pool->{statuspath} = $1;
+      }
+    }
+
+    close($poolconf);
+
+    # Check if entries are valid.
+    if (!$pool->{pool}) {
+      warning("Skipping pool %s: no pool name.",
+              $pool->{file});
+      next;
+    }
+    if (!$pool->{socket}) {
+      warning("Skipping pool %s: no socket.",
+              $pool->{file});
+      next;
+    }
+    if (!$pool->{statuspath}) {
+      warning("Skipping pool %s: no pm.status_path configured.",
+              $pool->{file});
+      next;
+    }
+
+    # Replace $pool in socket.
+    $pool->{socket} =~ s/\$pool/$pool->{pool}/g;
+
+    # Connect to pool.
+    $ENV{'SCRIPT_NAME'} = $pool->{statuspath};
+    $ENV{'SCRIPT_FILENAME'} = $pool->{statuspath};
+    $ENV{'QUERY_STRING'} = "json";
+    $ENV{'REQUEST_METHOD'} = "GET";
+    my $sh = sprintf("cgi-fcgi -bind -connect %s", $pool->{socket});
+    my $out_str = `$sh`;
+    if ($? != 0) {
+      printf "cgi-fcgi returned %d\n", $? >> 8;
+    } else {
+      # Strip header lines:
+      my @out_lines = split /\n/, $out_str;
+      while (@out_lines && $out_lines[0] !~ /^\r$/) {
+        shift @out_lines;
+      }
+      shift @out_lines;
+      
+      $pool->{values} = decode_json(join "\n", @out_lines);
+    }
+    
+    push @pools, $pool;
+  }
+  closedir($dh);
+}
+
+sort { $a->{pool} cmp $b->{pool}; } @pools;
+
+if ($ARGV[0] eq "config") {
+  print <<"EOF";
+multigraph phpfpm_connections
+graph_title PHP-FPM Accepted Connections
+graph_args --base 1024 -l 0
+graph_vlabel Connections
+graph_category PHP
+graph_info Shows the number of accepted connections to the PHP-FPM pool.
+EOF
+  foreach my $pool (@pools) {
+    my $poolname = $pool->{pool};
+    if (grep { $_ eq $poolname } @cfg_hide_pools) {
+      next;
+    }
+    print <<"EOF";
+${poolname}_connections.label $poolname
+${poolname}_connections.type DERIVE
+${poolname}_connections.draw AREASTACK
+${poolname}_connections.min 0
+EOF
+  }
+
+  print <<"EOF";
+
+multigraph phpfpm_active_processes
+graph_title PHP-FPM Active Processes
+graph_args --base 1000 -l 0
+graph_vlabel Processes
+graph_category PHP
+graph_info Shows the number of PHP-FPM processes.
+EOF
+  foreach my $pool (@pools) {
+    my $poolname = $pool->{pool};
+    if (grep { $_ eq $poolname } @cfg_hide_pools) {
+      next;
+    }
+    print <<"EOF";
+${poolname}_active_processes.label $poolname
+${poolname}_active_processes.type GAUGE
+${poolname}_active_processes.draw AREASTACK
+${poolname}_active_processes.min 0
+EOF
+  }
+
+  print <<"EOF";
+
+multigraph phpfpm_max_active_processes
+graph_title PHP-FPM Max Active Processes
+graph_args --base 1000 -l 0
+graph_vlabel Max Processes
+graph_category PHP
+graph_info Shows the number of max PHP-FPM processes reached.
+EOF
+  foreach my $pool (@pools) {
+    my $poolname = $pool->{pool};
+    if (grep { $_ eq $poolname } @cfg_hide_pools) {
+      next;
+    }
+    print <<"EOF";
+${poolname}_max_active_processes.label $poolname
+${poolname}_max_active_processes.type GAUGE
+${poolname}_max_active_processes.draw AREASTACK
+${poolname}_max_active_processes.min 0
+EOF
+  }
+
+  exit 0;
+}
+
+my $out = "";
+
+print "multigraph phpfpm_connections\n";
+foreach my $pool (@pools) {
+  my $poolname = $pool->{pool};
+  if (grep { $_ eq $poolname } @cfg_hide_pools) {
+    next;
+  }
+  printf("%s_connections.value %d\n",
+         $pool->{pool},
+         $pool->{values}->{"accepted conn"});
+}
+
+print "multigraph phpfpm_active_processes\n";
+foreach my $pool (@pools) {
+  my $poolname = $pool->{pool};
+  if (grep { $_ eq $poolname } @cfg_hide_pools) {
+    next;
+  }
+  printf("%s_active_processes.value %d\n",
+         $pool->{pool},
+         $pool->{values}->{"active processes"});
+}
+
+print "multigraph phpfpm_max_active_processes\n";
+foreach my $pool (@pools) {
+  my $poolname = $pool->{pool};
+  if (grep { $_ eq $poolname } @cfg_hide_pools) {
+    next;
+  }
+  printf("%s_max_active_processes.value %d\n",
+         $pool->{pool},
+         $pool->{values}->{"max active processes"});
+}
+
+exit 0;
+
+sub warning
+{
+  my $msg = shift;
+  my (@args) = @_;  
+  printf STDERR "WARNING: %s\n", sprintf($msg, @args);
+}

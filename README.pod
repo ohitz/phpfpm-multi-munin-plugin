@@ -1,0 +1,47 @@
+=head1 NAME
+
+phpfpm-multi - Munin multigraph plugin to monitor PHP FPM pools
+
+=head1 APPLICABLE SYSTEMS
+
+PHP FPM installations, tested with PHP 7.0 FPM.
+
+Requires the JSON perl module (C<apt-get install libjson-perl> on
+Debian systems) and the C<cgi-fcgi> tool (C<apt-get install
+libfcgi0ldbl> on Debian systems).
+
+=head1 CONFIGURATION
+
+The plugin needs to be able to read the different pool configuration
+files and needs access to the sockets. If root is the only user which
+has access to these resources, the following needs to be configured:
+
+    [phpfpm-multi]
+    user root
+
+The path to the socket as well as the status URL will be fetched read
+from the configuration file.
+
+In addition, the following variables can be defined:
+
+=over
+
+=item C<env.pooldir> (default: C</etc/php/7.0/fpm/pool.d>)
+
+Directory containing the pool configuration files.
+
+=item C<env.hide_pools> (default: empty)
+
+Comma-separated list of pools for which no statistics should be
+gathered.
+
+=back
+
+=head1 AUTHOR
+
+Oliver Hitz <oliver@net-track.ch>
+
+=head1 LICENSE
+
+GPL
+

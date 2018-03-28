@@ -26,7 +26,7 @@ In addition, the following variables can be defined:
 
 =over
 
-=item C<env.pooldir> (default: C</etc/php/7.0/fpm/pool.d>)
+=item C<env.pooldir> (default: automatically discovered)
 
 Directory containing the pool configuration files.
 

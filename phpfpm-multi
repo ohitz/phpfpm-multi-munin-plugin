@@ -29,7 +29,8 @@ In addition, the following variables can be defined:
 
 =over
 
-=item C<env.pooldir> (default: C</etc/php/7.0/fpm/pool.d>)
+=item C<env.pooldir> (default: automatically discovered)
+edited by Pierre Boesch <pierre+git@pboesch.fr>
 
 Directory containing the pool configuration files.
 
@@ -55,7 +56,17 @@ use JSON;
 use File::Spec;
 use Munin::Plugin;
 
-my $cfg_pooldir = $ENV{pooldir} || "/etc/php/7.0/fpm/pool.d/";
+my $cfg_pooldir;
+my $php_version = qx(php -v);
+my ($php_version) = ( $php_version =~ /(\d+(?:\.\d+)?)/ );
+
+if ($php_version =~ /^ 5/) {
+   $cfg_pooldir = "/etc/php5/fpm/pool.d/";
+} else {
+   $cfg_pooldir = "/etc/php/$php_version/fpm/pool.d/";
+}
+
+my $cfg_pooldir = $ENV{pooldir} || $cfg_pooldir;
 my @cfg_hide_pools;
 if ($ENV{hide_pools}) {
   @cfg_hide_pools = split /,/, $ENV{hide_pools};

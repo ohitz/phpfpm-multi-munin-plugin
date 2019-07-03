@@ -6,11 +6,12 @@ phpfpm-multi - Munin multigraph plugin to monitor PHP FPM pools
 
 =head1 APPLICABLE SYSTEMS
 
-PHP FPM installations, tested with PHP 7.0 FPM.
+PHP FPM installations, tested with PHP 5.6, 7.0 and 7.2 FPM.
 
-Requires the JSON perl module (C<apt-get install libjson-perl> on
-Debian systems) and the C<cgi-fcgi> tool (C<apt-get install
-libfcgi0ldbl> on Debian systems).
+Requires the JSON perl module and the C<cgi-fcgi> tool. On Debian systems
+install them using C<apt-get install libjson-perl libfcgi-bin> (older systems
+don't have a C<libfcgi-bin> package, install the C<libfcgi0ldbl> package
+instead).
 
 =head1 CONFIGURATION
 

@@ -123,8 +123,9 @@ if (opendir my $dh, $cfg_pooldir) {
       next;
     }
 
-    # Replace $pool in socket.
+    # Replace $pool in socket and pm.status_path
     $pool->{socket} =~ s/\$pool/$pool->{pool}/g;
+    $pool->{statuspath} =~ s/\$pool/$pool->{pool}/g;
 
     # Connect to pool.
     $ENV{'SCRIPT_NAME'} = $pool->{statuspath};

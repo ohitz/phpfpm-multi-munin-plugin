@@ -62,7 +62,7 @@ if ($ENV{pooldir}) {
 } else {
   # Try to autodetect pool directory
   my $php_version = `php -v`;
-  if ($php_version =~ /^PHP (\d+\.+d)/) {
+  if ($php_version =~ /^PHP (\d+\.\d+)/) {
     $cfg_pooldir = "/etc/php/$1/fpm/pool.d/";
   } else {
     # Fall-back to default

@@ -142,6 +142,10 @@ if (opendir my $dh, $cfg_pooldir) {
       next;
     }
 
+    if ( grep( /^$pool->{pool}$/, @cfg_hide_pools ) ) {
+      next;
+    }
+
     # Replace $pool in socket and pm.status_path
     $pool->{socket} =~ s/\$pool/$pool->{pool}/g;
     $pool->{statuspath} =~ s/\$pool/$pool->{pool}/g;
